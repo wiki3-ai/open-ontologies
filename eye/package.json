@@ -1,0 +1,10 @@
+{
+  "name": "oocert-eye",
+  "version": "0.1.0",
+  "private": true,
+  "description": "N3/EYE re-implementation of the open-ontologies OOCert certificate checker",
+  "license": "MIT",
+  "dependencies": {
+    "eyereasoner": "^21.1.24"
+  }
+}
