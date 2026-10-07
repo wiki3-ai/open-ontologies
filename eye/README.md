@@ -199,10 +199,35 @@ certificates this encoding is a feasibility demo, not a fast checker; the Lean
 checker is the production one. No inference-fuse aborts were observed on the
 fixtures here (`--ignore-inference-fuse` is passed to be safe).
 
-## What this does NOT claim
+## What this does and does not claim
+
+Which statement applies depends on which certificate kind is being checked.
+
+### `oo-cert` (the OWL-RL rule set in `checker.n3`)
 
 The soundness theorem `OOCert.certificate_sound` is about the Lean function and
-is not reproved here. N3 rules are data interpreted by EYE; an extension or a
-bug in the reasoner is outside this checker's trust argument. What it shows is
-that the *shape* of the check -- opaque-term equality, ordered premises,
-earlier-ok conclusions, per-rule arms -- is expressible in N3 without search.
+is **not** reproved here, nor by the Rocq development. The Rocq development
+proves `OOCertRocq.entails_of_builtin_horn`, which is a theorem about the
+**Horn** rule set, not the OWL-RL rules (`rdfs2/3/5/7/9/11`, the `scm-*`/`cls-*`
+families, the four RDF-list rules) that `checker.n3` implements. So for an
+`oo-cert` certificate the anchor **declines** and this checker's `accept` remains
+an operational result: *"a rule ran"*, not *"it is entailed"*. N3 rules are data
+interpreted by EYE, and an extension or a bug in the reasoner is outside this
+checker's trust argument. What it shows is that the *shape* of the check --
+opaque-term equality, ordered premises, earlier-ok conclusions, per-rule arms --
+is expressible in N3 without search.
+
+### `oo-horn` (the Horn rule set), with the anchor set
+
+Here the Rocq change **does** address this. With `OO_HORN_ROCQ` and `OO_RULES`
+set, the Rocq-extracted checker (theorem `OOCertRocq.entails_of_builtin_horn`,
+closed under the global context, no postulates) runs over the same inputs and an
+`accept` becomes *"entailed in every model of the asserted graph"* -- a proven
+verdict, not an operational one. See "Optional trust anchor" above.
+
+### Both
+
+Even with the anchor, the claim is **conditional on the asserted graph**: neither
+EYE nor Rocq checks that the graph handed to it is the graph the engine actually
+reasoned over (the repo's input-provenance / TCB-8 issue). That is a separate
+concern and is not closed here.
