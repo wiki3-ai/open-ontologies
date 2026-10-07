@@ -286,7 +286,13 @@ def run_anchor(cert_path, asserted_path):
     if not os.path.exists(ANCHOR):
         raise RuntimeError("anchor binary not found: %s" % ANCHOR)
     cmd = [ANCHOR, "check", RULES_TSV, asserted_path, cert_path]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+    except OSError as e:
+        # A binary that exists but cannot execute (wrong architecture, no exec
+        # bit, a host build in a shared tree) must read as 'could not check',
+        # never as 'checked and agreed'. The caller turns this into exit 2.
+        raise RuntimeError("anchor binary could not be run (%s): %s" % (e, ANCHOR))
     try:
         verdict = json.loads(proc.stdout.strip().splitlines()[-1])
     except (ValueError, IndexError):
