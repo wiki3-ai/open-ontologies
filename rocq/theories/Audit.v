@@ -24,7 +24,7 @@
 
 From Stdlib Require Import String.
 Open Scope string_scope.
-From OOCertRocq Require Import Syntax Semantics Checker Determinacy Sound Interp Builtin Parse Run Witness Fixtures.
+From OOCertRocq Require Import Syntax Semantics Checker Determinacy Sound Interp Builtin OwlRl OwlRlCert Parse Run Witness Fixtures.
 
 (** The relative warrant: bytes to entailment, both halves. *)
 Check run_is_sound.
@@ -69,3 +69,21 @@ Check deep_mutual_support_is_rejected.
 Print Assumptions deep_mutual_support_is_rejected.
 Check deep_mutual_seeded_is_accepted.
 Print Assumptions deep_mutual_seeded_is_accepted.
+
+(** The OWL-RL list extension: the four RDF-list rules and the combined theorem
+    over the whole rule set. *)
+Check owl_rl_list_sound.
+Print Assumptions owl_rl_list_sound.
+Check owl_rl_certificate_sound.
+Print Assumptions owl_rl_certificate_sound.
+Check cls_int1_with_every_member_typed_is_accepted.
+Print Assumptions cls_int1_with_every_member_typed_is_accepted.
+Check cls_int1_missing_a_member_type_is_rejected.
+Print Assumptions cls_int1_missing_a_member_type_is_rejected.
+
+(** The oo-cert OWL-RL checker: the concrete-premise format and its end-to-end
+    statement, the two theorems that let the anchor speak for oo-cert. *)
+Check check_ccert_sound.
+Print Assumptions check_ccert_sound.
+Check run_owlrl_is_sound.
+Print Assumptions run_owlrl_is_sound.

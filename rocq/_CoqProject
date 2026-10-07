@@ -15,4 +15,6 @@ theories/Witness.v
 theories/FixtureData.v
 theories/Fixtures.v
 theories/Audit.v
+theories/OwlRl.v
+theories/OwlRlCert.v
 theories/Extract.v

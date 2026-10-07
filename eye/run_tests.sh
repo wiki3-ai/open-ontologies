@@ -111,8 +111,10 @@ if [ -x "$ANCHOR" ] && [ -f "$RULES_TSV" ]; then
   expect 3 "anchor: oo-horn bad_conclusion (caught false pass)" -- \
     "$FIX/horn/asserted.tsv" "$FIX/horn/bad_conclusion.tsv"
 
-  # oo-cert: the anchor declines (Horn-only); the EYE verdict stands.
-  expect 0 "anchor: oo-cert declines, EYE verdict stands" -- \
+  # oo-cert: the SAME anchor now checks the full OWL-RL rule set (theorem
+  # OOCertRocq.check_ccert_sound), so an honest oo-cert certificate earns the
+  # theorem-backed verdict, not a declined note.
+  expect 0 "anchor: oo-cert checked (check_ccert_sound)" -- \
     "$FIX/refute/asserted.tsv" "$FIX/refute/derivations.tsv"
 
   # A configured-but-unrunnable anchor is a hard error, exit 2.

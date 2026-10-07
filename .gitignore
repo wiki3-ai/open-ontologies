@@ -96,6 +96,8 @@ rocq/Makefile.rocq.conf
 rocq/.Makefile.rocq.d
 rocq/driver/rocq_horn_core.ml
 rocq/driver/rocq_horn_core.mli
+rocq/driver/rocq_owlrl_core.ml
+rocq/driver/rocq_owlrl_core.mli
 rocq/driver/*.cmi
 rocq/driver/*.cmx
 rocq/driver/*.o

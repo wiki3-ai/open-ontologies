@@ -46,6 +46,12 @@ AUDITED=(
   good_is_accepted_with_the_absolute_verdict
   deep_mutual_support_is_rejected
   deep_mutual_seeded_is_accepted
+  owl_rl_list_sound
+  owl_rl_certificate_sound
+  cls_int1_with_every_member_typed_is_accepted
+  cls_int1_missing_a_member_type_is_rejected
+  check_ccert_sound
+  run_owlrl_is_sound
 )
 
 # The prover's own version identity, kept in build/ so a compiled object left
@@ -148,7 +154,7 @@ link() {
   local root="$1"
   cd "$root/driver"
   # shellcheck disable=SC2086
-  $OCAMLOPT rocq_horn_core.mli rocq_horn_core.ml main.ml -o ../build/oo-horn-rocq
+  $OCAMLOPT rocq_horn_core.mli rocq_horn_core.ml rocq_owlrl_core.mli rocq_owlrl_core.ml main.ml -o ../build/oo-horn-rocq
   rm -f ./*.cmi ./*.cmx ./*.o
   echo "linked $root/build/oo-horn-rocq"
 }

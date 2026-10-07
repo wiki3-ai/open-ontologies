@@ -231,3 +231,53 @@ Record RL (I : interp) : Prop := MkRL {
 
 Definition entails_abs (G : list triple) (t : triple) : Prop :=
   forall I : interp, RL I -> (forall u, In u G -> itrue I u) -> itrue I t.
+
+(** ** OWL-RL list vocabulary and model (the four list rules)
+
+    ADDITIVE. Nothing above changes. [chain] reads an RDF list off the ASSERTED
+    graph G, exactly as the Lean model's [Chain] and the N3 [urn:member] rules
+    do; [ListConds G I] gives the three constructors their meaning relative to
+    that chain. See [rocq-owl-rl-scope.md] section 2c. *)
+
+Definition rdf_first := "<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>".
+Definition rdf_rest  := "<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>".
+Definition rdf_nil   := "<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>".
+Definition owl_intersectionOf := "<http://www.w3.org/2002/07/owl#intersectionOf>".
+Definition owl_unionOf        := "<http://www.w3.org/2002/07/owl#unionOf>".
+Definition owl_oneOf          := "<http://www.w3.org/2002/07/owl#oneOf>".
+
+Inductive chain (G : list triple) : term -> list term -> Prop :=
+| chain_nil : chain G rdf_nil []
+| chain_cons : forall l m l' ms,
+    In (Tri l rdf_first m) G ->
+    In (Tri l rdf_rest  l') G ->
+    chain G l' ms ->
+    chain G l (m :: ms).
+
+Record ListConds (G : list triple) (I : interp) : Prop := MkListConds {
+  lc_int  : forall c l ms, In (Tri c owl_intersectionOf l) G -> chain G l ms ->
+              forall x, (forall m, In m ms -> icext I (iden I m) x) -> icext I (iden I c) x ;
+  lc_int2 : forall c l ms, In (Tri c owl_intersectionOf l) G -> chain G l ms ->
+              forall x, icext I (iden I c) x -> forall m, In m ms -> icext I (iden I m) x ;
+  lc_uni  : forall c l ms, In (Tri c owl_unionOf l) G -> chain G l ms ->
+              forall x m, In m ms -> icext I (iden I m) x -> icext I (iden I c) x ;
+  lc_oo   : forall c l ms, In (Tri c owl_oneOf l) G -> chain G l ms ->
+              forall m, In m ms -> icext I (iden I c) (iden I m)
+}.
+
+Arguments lc_int {G I} _.
+Arguments lc_int2 {G I} _.
+Arguments lc_uni {G I} _.
+Arguments lc_oo {G I} _.
+
+Lemma ListConds_nil : forall I, ListConds [] I.
+Proof. intros I. constructor; intros; destruct H. Qed.
+
+(** ** THE OWL-RL ABSOLUTE RELATION
+
+    Adds [ListConds] to [entails_abs]'s hypotheses. It is therefore a WEAKER
+    claim than [entails_abs] (smaller model class), which is the honest
+    direction: the four list rules cannot be discharged without a list model. *)
+
+Definition entails_owlrl (G : list triple) (t : triple) : Prop :=
+  forall I : interp, RL I -> ListConds G I -> (forall u, In u G -> itrue I u) -> itrue I t.

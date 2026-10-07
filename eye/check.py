@@ -307,37 +307,48 @@ OK_RE = re.compile(r"<urn:st:(\d+)>\s+<urn:ok>\s+<urn:True>")
 
 
 # ------------------------------------------------------------ trust anchor
-# The OPTIONAL trust anchor is the Rocq-extracted, machine-checked oo-horn
-# checker (../open-ontologies/rocq/build/oo-horn-rocq), which carries the
-# theorem OOCertRocq.entails_of_builtin_horn.  When it speaks, an `accept`
+# The OPTIONAL trust anchor is the Rocq-extracted, machine-checked checker
+# (../open-ontologies/rocq/build/oo-horn-rocq).  When it speaks, an `accept`
 # means "entailed", not "a rule ran".  Set OO_HORN_ROCQ to its path and
-# OO_RULES to a rules table (e.g. tests/fixtures/horn/builtin_rules.tsv).
+# OO_RULES to the Horn rules table (e.g. tests/fixtures/horn/builtin_rules.tsv).
 #
-# It checks the HORN rule set only.  It does NOT cover the oo-cert OWL-RL rule
-# set -- the four RDF-list rules in particular -- so the anchor is applied to
-# oo-horn certificates and DECLINES for oo-cert rather than overclaiming.
+# The SAME binary now speaks for BOTH certificate kinds:
+#   oo-horn  -> `check RULES.tsv ASSERTED.tsv HORN.tsv`,  theorem
+#               OOCertRocq.entails_of_builtin_horn
+#   oo-cert  -> `cert ASSERTED.tsv CERT.tsv`,             theorem
+#               OOCertRocq.check_ccert_sound  (the full OWL-RL rule set,
+#               including the four RDF-list rules)
+# So the anchor no longer DECLINES for oo-cert; it checks it, and a refusal of
+# a certificate EYE accepted is a caught false pass (exit 3), exactly as for
+# oo-horn.
 ANCHOR = os.environ.get("OO_HORN_ROCQ")
 RULES_TSV = os.environ.get("OO_RULES")
 
 
-def run_anchor(cert_path, asserted_path, binary=None, rules=None):
-    """Run the proven oo-horn checker over the same inputs.  Returns a dict,
-    or None when no anchor is configured.  Raises RuntimeError when it is
+def run_anchor(cert_path, asserted_path, fmt="oo-horn", binary=None, rules=None):
+    """Run the proven Rocq checker over the same inputs.  Returns a dict, or
+    None when no anchor is configured.  Raises RuntimeError when it is
     configured but cannot run, so a caller never reads 'could not check' as
     'checked and agreed'.
 
     `binary`/`rules` default to the module's ANCHOR/RULES_TSV (what the CLI
     sets from OO_HORN_ROCQ/OO_RULES) so an importing caller can pass them
-    directly instead of mutating module state."""
+    directly instead of mutating module state.  `rules` is needed only for the
+    Horn path; the oo-cert path carries its table in the binary."""
     binary = binary if binary is not None else ANCHOR
     rules = rules if rules is not None else RULES_TSV
     if not binary:
         return None
-    if not rules:
-        raise RuntimeError("an anchor binary was given but no rules table was")
     if not os.path.exists(binary):
         raise RuntimeError("anchor binary not found: %s" % binary)
-    cmd = [binary, "check", rules, asserted_path, cert_path]
+    if fmt == "oo-horn":
+        if not rules:
+            raise RuntimeError("the oo-horn anchor needs a rules table")
+        cmd = [binary, "check", rules, asserted_path, cert_path]
+    elif fmt == "oo-cert":
+        cmd = [binary, "cert", asserted_path, cert_path]
+    else:
+        raise RuntimeError("the anchor does not speak for %s certificates" % fmt)
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True)
     except OSError as e:
@@ -390,19 +401,19 @@ def check_certificate(asserted, steps, fmt="oo-cert", refute_line=None,
             out["rejected_step"] = prefix_idx
         return (2, out)
 
-    # The optional trust anchor.  It speaks for oo-horn certificates; for
-    # oo-cert it declines, because the proven checker does not cover the
-    # OWL-RL rule set.  A configured-but-broken anchor is a hard error (exit 2):
-    # 'could not check' must never read as 'checked and agreed'.
+    # The optional trust anchor.  The proven Rocq checker speaks for BOTH
+    # oo-horn (theorem entails_of_builtin_horn) and oo-cert (theorem
+    # check_ccert_sound, the full OWL-RL rule set).  A configured-but-broken
+    # anchor is a hard error (exit 2): 'could not check' must never read as
+    # 'checked and agreed'.
     binary = anchor_binary if anchor_binary is not None else ANCHOR
     anchor = None
     if binary:
-        if fmt == "oo-horn":
+        if fmt in ("oo-horn", "oo-cert"):
             if not cert_path or not asserted_path:
                 raise RuntimeError("an anchor needs cert_path and asserted_path")
             try:
-                anchor = run_anchor(cert_path, asserted_path,
-                                    binary=binary,
+                anchor = run_anchor(cert_path, asserted_path, fmt=fmt, binary=binary,
                                     rules=anchor_rules if anchor_rules is not None else RULES_TSV)
             except RuntimeError as e:
                 return (2, {"ok": False, "error": "anchor: %s" % e})
@@ -419,12 +430,12 @@ def check_certificate(asserted, steps, fmt="oo-cert", refute_line=None,
             # that is a caught FALSE PASS, not a clean accept: surface it and
             # leave with a distinct code, so a pipeline checking only for 0 can
             # not treat ``EYE said ok, the theorem said no'' as success.
-            if fmt == "oo-horn" and anchor.get("exit") not in (0, None):
+            if fmt in ("oo-horn", "oo-cert") and anchor.get("exit") not in (0, None):
                 disagree = True
                 out["anchor_disagrees"] = True
                 out["ok"] = False
-                out["error"] = ("the proven oo-horn anchor refused a certificate "
-                                "EYE accepted (possible false pass)")
+                out["error"] = ("the proven Rocq anchor refused an %s certificate "
+                                "EYE accepted (possible false pass)" % fmt)
         return (3 if disagree else 0, out)
     rule, conclusion, premises = steps[idx]
     out = {

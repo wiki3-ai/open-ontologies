@@ -53,13 +53,17 @@ The verdict line then carries the anchor's second opinion, e.g.
 `"anchor": {"binary":"oo-horn-rocq","exit":0,"verdict":{"ok":true,...
 "theorem":"OOCertRocq.entails_of_builtin_horn"}}`. Rules:
 
-- The anchor speaks for **oo-horn** certificates only. On an **oo-cert**
-certificate it **declines** (`"applied": false`) rather than pretend, because the
-proven checker covers the Horn rule set and not the OWL-RL rules (the four
-RDF-list rules in particular).
+- The anchor speaks for **both** certificate kinds, through two subcommands of
+the same binary: `check RULES.tsv ASSERTED.tsv HORN.tsv` for `oo-horn`
+(`theorem: OOCertRocq.entails_of_builtin_horn`) and `cert ASSERTED.tsv CERT.tsv`
+for `oo-cert` (`theorem: OOCertRocq.check_ccert_sound`, the full OWL-RL rule set
+including the four RDF-list rules). The `oo-cert` path needs no rules table: the
+table is in the binary.
 - A configured-but-unrunnable anchor is a **hard error**, exit 2. "Could not
 check" must never read as "checked and agreed".
 - When EYE and the anchor **disagree**, the output says `"anchor_disagrees": true`.
+  For either kind, a refusal of a certificate EYE accepted is a caught false pass
+  and leaves with code **3**, never 0.
 
 ### A divergence the anchor found
 
@@ -215,17 +219,27 @@ Which statement applies depends on which certificate kind is being checked.
 
 ### `oo-cert` (the OWL-RL rule set in `checker.n3`)
 
-The soundness theorem `OOCert.certificate_sound` is about the Lean function and
-is **not** reproved here, nor by the Rocq development. The Rocq development
-proves `OOCertRocq.entails_of_builtin_horn`, which is a theorem about the
-**Horn** rule set, not the OWL-RL rules (`rdfs2/3/5/7/9/11`, the `scm-*`/`cls-*`
-families, the four RDF-list rules) that `checker.n3` implements. So for an
-`oo-cert` certificate the anchor **declines** and this checker's `accept` remains
-an operational result: *"a rule ran"*, not *"it is entailed"*. N3 rules are data
-interpreted by EYE, and an extension or a bug in the reasoner is outside this
-checker's trust argument. What it shows is that the *shape* of the check --
-opaque-term equality, ordered premises, earlier-ok conclusions, per-rule arms --
-is expressible in N3 without search.
+The Lean soundness theorem `OOCert.certificate_sound` is about the Lean function
+and is **not** reproved here. EYE's own accept remains an operational result --
+*"a rule ran"*, not *"it is entailed"* -- because N3 rules are data interpreted
+by EYE and an extension or a bug in the reasoner is outside `checker.n3`'s trust
+argument. What the N3 re-implementation shows on its own is that the *shape* of
+the check (opaque-term equality, ordered premises, earlier-ok conclusions,
+per-rule arms) is expressible in N3 without search.
+
+With the Rocq anchor set, the same `oo-cert` file is also run through the
+Rocq-extracted checker `run_owlrl`, whose theorem is
+`OOCertRocq.check_ccert_sound` -- the full OWL-RL rule set, the four RDF-list
+rules included, over the `oo-cert` premise format. So an `oo-cert` accept **does**
+earn a theorem now, not a declined note.
+
+The claim that theorem makes is `entails_owlrl`: true in every model of the
+asserted graph *that also reads an `rdf:first`/`rdf:rest` chain off it*. That is a
+**narrower** model class than `entails_abs`, which the Horn theorem uses, so it
+is a weaker claim than the Horn one -- the honest direction, and it is stated at
+the theorem rather than a footnote. The two anchors name two different theorems
+(`entails_of_builtin_horn`, `check_ccert_sound`) and the JSON says which one
+spoke.
 
 ### `oo-horn` (the Horn rule set), with the anchor set
 

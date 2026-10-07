@@ -1,11 +1,14 @@
-# `rocq/`: an independent third formalisation of the Horn certificate checker
+# `rocq/`: an independent third formalisation of the certificate checker
 
-This directory is a third formalisation of the Horn certificate checker and its model
-theory, in Rocq 9.2 (the proof assistant formerly called Coq). It exists for the reason
-`isabelle/` exists: a machine-checked proof rules out a bad argument and says nothing
-about a bad definition, and a bad definition is invisible from inside a single
-formalisation by construction. A second reading catches a definitional mistake only if the
-second reading is genuinely a second one.
+This directory is a third formalisation of the certificate checker and its model
+theory, in Rocq 9.2 (the proof assistant formerly called Coq). It covers the Horn rule
+set (`entails_of_builtin_horn`) AND the full OWL-RL rule set that `eye/checker.n3`
+implements (`check_ccert_sound`), the four RDF-list rules `cls-int1`, `cls-int2`,
+`cls-uni` and `cls-oo` included. It exists for the reason `isabelle/` exists: a
+machine-checked proof rules out a bad argument and says nothing about a bad definition,
+and a bad definition is invisible from inside a single formalisation by construction. A
+second reading catches a definitional mistake only if the second reading is genuinely a
+second one.
 
 It is smaller than either of the other two and it says so throughout. What is covered and
 what is not is in "Scope" below, and the boundary is stated in the negative, because a
@@ -74,6 +77,14 @@ disagree, that is a finding and it belongs in a report before it belongs in a pa
   true in every model of the asserted graph, with no rule assumed. Each of the
   twenty-seven arms is derived from the semantic conditions of `Interp.v` and each takes
   exactly the conditions it uses as explicit hypotheses.
+* **The absolute theorem for the FULL OWL-RL rule set.** `check_ccert_sound` in
+  `OwlRlCert.v`: a certificate in the `oo-cert` `derivations.tsv` format, over the same
+  built-in rows PLUS the four RDF-list rules `cls-int1`, `cls-int2`, `cls-uni` and
+  `cls-oo`, has conclusions true in every model of the asserted graph with no rule
+  assumed. The four list rules are proved in `OwlRl.v` against `entails_owlrl`, whose
+  model class also reads an `rdf:first`/`rdf:rest` chain off the asserted graph
+  (`ListConds` in `Interp.v`). That is a NARROWER model class than `entails_abs`, so the
+  list extension is a weaker claim than the Horn one -- the honest direction.
 * **What the two well-formedness conjuncts buy, and what they do not.**
   `horn_certificate_sound_without_wellformedness` proves the soundness theorem with both
   conjuncts deleted, so neither carries soundness content, and
@@ -91,10 +102,12 @@ disagree, that is a finding and it belongs in a report before it belongs in a pa
 
 ## Scope: what is NOT covered
 
-* **The four non-Horn rules.** `cls-int1`, `cls-int2`, `cls-uni` and `cls-oo` read an RDF
-  list off the graph, so their premise count is data rather than fixed by the rule. They
-  are outside the Horn family and outside this directory, as they are outside the Lean's
-  Horn layer.
+* **The four non-Horn rules as they appear in `lean/`.** `cls-int1`, `cls-int2`, `cls-uni`
+  and `cls-oo` read an RDF list off the graph, so their premise count is data rather than
+  fixed by the rule. They ARE formalised here now (`OwlRl.v`), but against `entails_owlrl`
+  rather than `entails_abs`, and on the oo-cert premise format, which is a different
+  encoding from the Lean Horn layer's. Where this directory and the Lean one disagree
+  about them, that is a finding, not a bug.
 * **Everything else in `lean/`.** The mixed certificate layer, refutations, the
   description-logic model certificates, the first-order model checker, the SHACL
   evaluator, the institution and comorphism material: none of it is formalised here and
@@ -145,6 +158,8 @@ disagree, that is a finding and it belongs in a report before it belongs in a pa
 | `theories/Builtin.v` | the table as data, the twenty-seven arms, `entails_of_builtin_horn`. |
 | `theories/Parse.v` | TSV bytes to datatypes, and the rule-table comparison. |
 | `theories/Run.v` | the outcome type and `run_is_sound`, the end-to-end statement. |
+| `theories/OwlRl.v` | the four RDF-list rules, `entails_owlrl`, `owl_rl_certificate_sound`. |
+| `theories/OwlRlCert.v` | the `oo-cert` premise format, the matcher, `check_ccert_sound`, `run_owlrl_is_sound`. |
 | `theories/Witness.v` | non-vacuity, and the gap between the two verdicts. |
 | `theories/Fixtures.v` | the checker run on the committed bytes, inside the kernel. |
 | `theories/Audit.v` | `Print Assumptions` on every advertised theorem. |

@@ -18,13 +18,19 @@
     splits nothing, decides nothing, prints JSON and returns an exit code. The
     exact boundary is in [rocq/README.md]. *)
 
-From OOCertRocq Require Import Run Builtin Parse.
+From OOCertRocq Require Import Run Builtin Parse OwlRlCert.
 From Stdlib Require Import Extraction.
 
 Extraction Language OCaml.
 Set Extraction Output Directory "driver".
 
-(** [run] is the whole checker. [builtin] and [ruleStr]-free printing are not
+(** [run] is the oo-horn checker. [builtin] and [ruleStr]-free printing are not
     extracted: the driver never needs the table, because the comparison against
     it happens inside [run] (R-RUN-2). *)
 Extraction "rocq_horn_core.ml" run.
+
+(** [run_owlrl] is the oo-cert checker for the full OWL-RL rule set, with the
+    theorem [check_ccert_sound] behind it. The driver dispatches on the same
+    file shape `eye/check.py` does, so one binary answers both certificate
+    kinds. *)
+Extraction "rocq_owlrl_core.ml" run_owlrl.

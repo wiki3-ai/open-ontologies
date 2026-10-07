@@ -1,28 +1,18 @@
 (* The untrusted driver.
 
-   Everything verified is in [rocq_horn_core.ml], which is extracted from the
-   theories and read by nobody. This file opens three paths, hands their bytes
-   to [run], prints one JSON object and returns an exit code. It decides
-   nothing about what a certificate says: no splitting, no trimming, no
-   normalising, no fallback. If it is wrong, it is wrong about file IO and
-   printing, which is the same boundary the Lean and the Isabelle drivers sit
-   on.
+   Everything verified is in rocq_horn_core.ml and rocq_owlrl_core.ml, which are
+   extracted from the theories and read by nobody. This file opens paths, hands
+   their bytes to a checker, prints one JSON object and returns an exit code. It
+   decides nothing about what a certificate says: no splitting, no trimming, no
+   normalising, no fallback.
 
-   The CLI shape and the exit codes are `oo-horn`'s deliberately, so that a
-   differential compares two checkers rather than two ways of being invoked.
-
-     oo-horn-rocq check RULES.tsv ASSERTED.tsv HORN.tsv
+     oo-horn-rocq check RULES.tsv ASSERTED.tsv HORN.tsv   oo-horn (Horn)
+     oo-horn-rocq cert  ASSERTED.tsv CERT.tsv             oo-cert (OWL-RL)
 
    0 accepted, 1 rejected, 2 unreadable or unparseable, 70 the checker itself
-   failed.
-
-   The fourth code is not decoration. OCaml exits an uncaught exception with
-   status 2, which is this tool's code for a parse error, so a Stack_overflow
-   inside the extracted checker came out looking exactly like a refusal to read
-   the file. That happened, on a certificate citing rule 99999999999999999999,
-   and the differential against the Lean checker is what found it. The cause is
-   fixed in the theories (R-STEP-3, R-PARSE-8); this handler is the second half,
-   so that if anything else ever crashes it cannot be mistaken for a verdict.
+   failed. The fourth code is not decoration: OCaml exits an uncaught exception
+   with status 2, which is this tool's code for a parse error, so a Stack_overflow
+   inside the extracted checker came out looking like a refusal to read the file.
    70 is EX_SOFTWARE from sysexits, and nothing else in this tool uses it. *)
 
 let rec nat_to_int (n : Rocq_horn_core.nat) : int =
@@ -44,6 +34,21 @@ let rocq_string (s : string) : Rocq_horn_core.string =
   done;
   !acc
 
+let rec nat_to_int_o (n : Rocq_owlrl_core.nat) : int =
+  match n with Rocq_owlrl_core.O -> 0 | Rocq_owlrl_core.S m -> 1 + nat_to_int_o m
+
+let ascii_of_char_o (c : char) : Rocq_owlrl_core.ascii =
+  let n = Char.code c in
+  let b i = if n land (1 lsl i) <> 0 then Rocq_owlrl_core.True else Rocq_owlrl_core.False in
+  Rocq_owlrl_core.Ascii (b 0, b 1, b 2, b 3, b 4, b 5, b 6, b 7)
+
+let rocq_string_o (s : string) : Rocq_owlrl_core.string =
+  let acc = ref Rocq_owlrl_core.EmptyString in
+  for i = String.length s - 1 downto 0 do
+    acc := Rocq_owlrl_core.String (ascii_of_char_o s.[i], !acc)
+  done;
+  !acc
+
 let read_file (path : string) : string =
   let ic = open_in_bin path in
   let n = in_channel_length ic in
@@ -58,33 +63,33 @@ let which_file = function
 
 let usage () =
   prerr_endline "usage: oo-horn-rocq check RULES.tsv ASSERTED.tsv HORN.tsv";
+  prerr_endline "       oo-horn-rocq cert  ASSERTED.tsv CERT.tsv";
   exit 2
 
-let () =
-  match Array.to_list Sys.argv with
-  | [ _; "check"; rpath; gpath; dpath ] -> (
-      let texts =
-        try Some (read_file rpath, read_file gpath, read_file dpath)
-        with Sys_error m ->
-          prerr_endline ("cannot read: " ^ m);
-          None
+let read_two a b =
+  try Some (read_file a, read_file b)
+  with Sys_error m -> prerr_endline ("cannot read: " ^ m); None
+
+let read_three a b c =
+  try Some (read_file a, read_file b, read_file c)
+  with Sys_error m -> prerr_endline ("cannot read: " ^ m); None
+
+(* oo-horn: the Horn rule set, theorem entails_of_builtin_horn. *)
+let run_horn rpath gpath dpath =
+  match read_three rpath gpath dpath with
+  | None -> exit 2
+  | Some (rtxt, gtxt, dtxt) -> (
+      let result =
+        try Ok (Rocq_horn_core.run (rocq_string rtxt) (rocq_string gtxt) (rocq_string dtxt))
+        with e -> Error (Printexc.to_string e)
       in
-      match texts with
-      | None -> exit 2
-      | Some (rtxt, gtxt, dtxt) -> (
-          let result =
-            try
-              Ok (Rocq_horn_core.run (rocq_string rtxt) (rocq_string gtxt)
-                    (rocq_string dtxt))
-            with e -> Error (Printexc.to_string e)
-          in
-          match result with
-          | Error msg ->
-              prerr_endline
-                ("the checker failed rather than answering: " ^ msg
-               ^ " (exit 70; this is NOT a verdict and NOT a parse error)");
-              exit 70
-          | Ok outcome -> (
+      match result with
+      | Error msg ->
+          prerr_endline
+            ("the checker failed rather than answering: " ^ msg
+             ^ " (exit 70; this is NOT a verdict and NOT a parse error)");
+          exit 70
+      | Ok outcome -> (
           match outcome with
           | Rocq_horn_core.Accepted (b, nr, ng, ns) ->
               let builtin = bool_of_rocq b in
@@ -114,5 +119,41 @@ let () =
               exit 1
           | Rocq_horn_core.ParseError w ->
               prerr_endline ("parse error in the " ^ which_file (nat_to_int w) ^ " file");
-              exit 2)))
+              exit 2))
+
+(* oo-cert: the full OWL-RL rule set, theorem check_ccert_sound. *)
+let run_cert gpath dpath =
+  match read_two gpath dpath with
+  | None -> exit 2
+  | Some (gtxt, dtxt) -> (
+      let result =
+        try Ok (Rocq_owlrl_core.run_owlrl (rocq_string_o gtxt) (rocq_string_o dtxt))
+        with e -> Error (Printexc.to_string e)
+      in
+      match result with
+      | Error msg ->
+          prerr_endline
+            ("the checker failed rather than answering: " ^ msg
+             ^ " (exit 70; this is NOT a verdict and NOT a parse error)");
+          exit 70
+      | Ok outcome -> (
+          match outcome with
+          | Rocq_owlrl_core.Accepted (_b, _nr, ng, ns) ->
+              Printf.printf
+                "{\"ok\":true,\"kernel\":\"rocq\",\"verdict\":\"entailed\",\"asserted\":%d,\"derivations\":%d,\"theorem\":\"OOCertRocq.check_ccert_sound\",\"means\":\"every conclusion is true in every OWL-RL model of the asserted graph, over the full rule set including the four RDF-list rules\"}\n"
+                (nat_to_int_o ng) (nat_to_int_o ns);
+              exit 0
+          | Rocq_owlrl_core.Rejected (_nr, ng, ns) ->
+              Printf.printf
+                "{\"ok\":false,\"kernel\":\"rocq\",\"asserted\":%d,\"derivations\":%d}\n"
+                (nat_to_int_o ng) (nat_to_int_o ns);
+              exit 1
+          | Rocq_owlrl_core.ParseError w ->
+              prerr_endline ("parse error in the " ^ which_file (nat_to_int_o w) ^ " file");
+              exit 2))
+
+let () =
+  match Array.to_list Sys.argv with
+  | [ _; "check"; rpath; gpath; dpath ] -> run_horn rpath gpath dpath
+  | [ _; "cert"; gpath; dpath ] -> run_cert gpath dpath
   | _ -> usage ()
