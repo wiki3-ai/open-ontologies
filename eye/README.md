@@ -25,6 +25,9 @@ Exit codes, matching `lean/Main.lean`:
 | `0` | every step checks -- `{"ok":true,"asserted":A,"derivations":D}` |
 | `1` | a step was rejected -- JSON names the FIRST one (rule, conclusion, premises) |
 | `2` | a file could not be read or parsed (or it is an `oo-refute/1` certificate) |
+| `3` | **only with the anchor set:** EYE accepted but the proven checker refused (`anchor_disagrees`). A caught false pass is not a clean `0`. |
+
+Codes `0`-`2` match `lean/Main.lean`; `3` exists only when `OO_HORN_ROCQ`/`OO_RULES` are set, and is never returned otherwise.
 
 ## Optional trust anchor
 

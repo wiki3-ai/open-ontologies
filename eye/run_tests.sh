@@ -89,6 +89,48 @@ expect 1 "neg: horn/supplier/forged.tsv" -- \
 expect 2 "parse: refute/good.tsv is oo-refute/1" -- \
   "$FIX/refute/asserted.tsv" "$FIX/refute/good.tsv"
 
+# --- trust anchor (only when the proven checker is built) --------------------
+# The anchor is the Rocq-extracted, machine-checked oo-horn checker, built at
+# ../rocq/build/oo-horn-rocq by `(cd ../rocq && bash build.sh)`.  When it is
+# absent the anchor tests SKIP LOUDLY rather than pass quietly: a gate that
+# disappears when its tool is missing is decoration.
+ANCHOR="${OO_HORN_ROCQ:-$O/rocq/build/oo-horn-rocq}"
+RULES_TSV="${OO_RULES:-$FIX/horn/builtin_rules.tsv}"
+if [ -x "$ANCHOR" ] && [ -f "$RULES_TSV" ]; then
+  export OO_HORN_ROCQ="$ANCHOR"
+  export OO_RULES="$RULES_TSV"
+
+  # oo-horn: EYE and the anchor agree -- clean accept, exit 0.
+  expect 0 "anchor: oo-horn good (agree)" -- \
+    "$FIX/horn/asserted.tsv" "$FIX/horn/good.tsv"
+
+  # THE REGRESSION THAT MATTERS: EYE accepts bad_conclusion (its binding
+  # contradicts the conclusion) but the proven anchor refuses it.  A caught
+  # false pass must leave with the distinct exit 3, never 0.  If EYE ever starts
+  # agreeing here this test fails, which is the point.
+  expect 3 "anchor: oo-horn bad_conclusion (caught false pass)" -- \
+    "$FIX/horn/asserted.tsv" "$FIX/horn/bad_conclusion.tsv"
+
+  # oo-cert: the anchor declines (Horn-only); the EYE verdict stands.
+  expect 0 "anchor: oo-cert declines, EYE verdict stands" -- \
+    "$FIX/refute/asserted.tsv" "$FIX/refute/derivations.tsv"
+
+  # A configured-but-unrunnable anchor is a hard error, exit 2.
+  ran=$((ran + 1))
+  OO_HORN_ROCQ=/nonexistent python3 "$HERE/check.py" \
+    "$FIX/horn/asserted.tsv" "$FIX/horn/good.tsv" >/dev/null 2>&1
+  got=$?
+  if [ "$got" = 2 ]; then
+    echo "PASS [anchor: broken path exits 2] exit=2"
+  else
+    echo "FAIL [anchor: broken path must exit 2] got $got"
+    fails=$((fails + 1))
+  fi
+  unset OO_HORN_ROCQ OO_RULES
+else
+  echo "SKIP [trust anchor] $ANCHOR not built (run: (cd ../rocq && bash build.sh))"
+fi
+
 # --- summary ----------------------------------------------------------------
 echo
 echo "ran $ran, failed $fails"

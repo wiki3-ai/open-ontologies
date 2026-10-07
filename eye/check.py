@@ -8,6 +8,12 @@ Exit codes, matching `lake exe oo-cert` (lean/Main.lean):
   1  a step was rejected; JSON names the first one
   2  a file could not be read or parsed
 
+With the optional trust anchor set (OO_HORN_ROCQ + OO_RULES), one more code:
+  3  EYE accepted but the proven oo-horn checker refused (anchor_disagrees).
+     A caught false pass is NOT a clean accept: a pipeline that only checks for
+     0 cannot silently treat "EYE said ok, the theorem said no" as success.
+     Without an anchor configured, 3 is never returned.
+
 The trusted part is checker.n3, run by the EYE/WASM reasoner.  This driver is
 the untrusted wrapper: it parses the TSV, emits canonical N3, runs EYE, and
 reads back the `:ok` facts.  It never decides a step itself.
@@ -353,15 +359,21 @@ def main(argv):
     ok, idx = check_steps(asserted, steps)
     if ok:
         out = {"ok": True, "asserted": len(asserted), "derivations": len(steps)}
+        disagree = False
         if anchor is not None:
             out["anchor"] = anchor
-            # The anchor's verdict is advisory evidence here: EYE ran the check,
-            # the anchor is the proven second opinion.  Disagreement is surfaced,
-            # never hidden.
+            # EYE accepted.  If the proven anchor refused the same certificate,
+            # that is a caught FALSE PASS, not a clean accept: surface it and
+            # leave with a distinct code, so a pipeline checking only for 0 can
+            # not treat ``EYE said ok, the theorem said no'' as success.
             if fmt == "oo-horn" and anchor.get("exit") not in (0, None):
+                disagree = True
                 out["anchor_disagrees"] = True
+                out["ok"] = False
+                out["error"] = ("the proven oo-horn anchor refused a certificate "
+                                "EYE accepted (possible false pass)")
         print(json.dumps(out))
-        return 0
+        return 3 if disagree else 0
     rule, conclusion, premises = steps[idx]
     out = {
         "ok": False,
