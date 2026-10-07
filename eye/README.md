@@ -10,7 +10,7 @@ readable `checker.n3`.
 ## Run it
 
 ```bash
-cd /a0/usr/projects/pup/eye-ontologies/oocert
+cd open-ontologies/eye
 python3 check.py ASSERTED.tsv DERIVATIONS.tsv
 
 # full test suite (expects the open-ontologies checkout at its default path,
@@ -25,6 +25,41 @@ Exit codes, matching `lean/Main.lean`:
 | `0` | every step checks -- `{"ok":true,"asserted":A,"derivations":D}` |
 | `1` | a step was rejected -- JSON names the FIRST one (rule, conclusion, premises) |
 | `2` | a file could not be read or parsed (or it is an `oo-refute/1` certificate) |
+
+## Optional trust anchor
+
+The check above runs in EYE, where an `accept` means "a rule ran". For an `accept`
+that means "**entailed, proven**", point the driver at the Rocq-extracted,
+machine-checked `oo-horn-rocq` (see `../rocq/`, theorem
+`OOCertRocq.entails_of_builtin_horn`):
+
+```bash
+export OO_HORN_ROCQ=../rocq/build/oo-horn-rocq          # after: (cd ../rocq && bash build.sh)
+export OO_RULES=../tests/fixtures/horn/builtin_rules.tsv
+python3 check.py ASSERTED.tsv HORN.tsv                 # oo-horn certificates
+```
+
+The verdict line then carries the anchor's second opinion, e.g.
+`"anchor": {"binary":"oo-horn-rocq","exit":0,"verdict":{"ok":true,...
+"theorem":"OOCertRocq.entails_of_builtin_horn"}}`. Rules:
+
+- The anchor speaks for **oo-horn** certificates only. On an **oo-cert**
+certificate it **declines** (`"applied": false`) rather than pretend, because the
+proven checker covers the Horn rule set and not the OWL-RL rules (the four
+RDF-list rules in particular).
+- A configured-but-unrunnable anchor is a **hard error**, exit 2. "Could not
+check" must never read as "checked and agreed".
+- When EYE and the anchor **disagree**, the output says `"anchor_disagrees": true`.
+
+### A divergence the anchor found
+
+`../tests/fixtures/horn/bad_conclusion.tsv` carries a binding `b = Z` that
+contradicts its own conclusion object `B`. The proven checker **rejects** it; this
+driver **accepts** it. The reason is structural: the Horn certificate's bindings
+are stripped here (`parse_horn_steps` maps the rule index through `asHorn` and
+keeps only the concrete triples), so a binding that disagrees with the conclusion
+is invisible to the N3 check. It is a textbook false pass, and it is exactly the
+kind of difference the anchor exists to surface.
 
 ## Design
 

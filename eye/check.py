@@ -254,6 +254,50 @@ def run_eye(work_abs):
 OK_RE = re.compile(r"<urn:st:(\d+)>\s+<urn:ok>\s+<urn:True>")
 
 
+# ------------------------------------------------------------ trust anchor
+# The OPTIONAL trust anchor is the Rocq-extracted, machine-checked oo-horn
+# checker (../open-ontologies/rocq/build/oo-horn-rocq), which carries the
+# theorem OOCertRocq.entails_of_builtin_horn.  When it speaks, an `accept`
+# means "entailed", not "a rule ran".  Set OO_HORN_ROCQ to its path and
+# OO_RULES to a rules table (e.g. tests/fixtures/horn/builtin_rules.tsv).
+#
+# It checks the HORN rule set only.  It does NOT cover the oo-cert OWL-RL rule
+# set -- the four RDF-list rules in particular -- so the anchor is applied to
+# oo-horn certificates and DECLINES for oo-cert rather than overclaiming.
+ANCHOR = os.environ.get("OO_HORN_ROCQ")
+RULES_TSV = os.environ.get("OO_RULES")
+
+
+def run_anchor(cert_path, asserted_path):
+    """Run the proven oo-horn checker over the same inputs.  Returns a dict,
+    or None when no anchor is configured.  Raises RuntimeError when it is
+    configured but cannot run, so a caller never reads 'could not check' as
+    'checked and agreed'."""
+    if not ANCHOR:
+        return None
+    if not RULES_TSV:
+        raise RuntimeError("OO_HORN_ROCQ is set but OO_RULES (rules table) is not")
+    if not os.path.exists(ANCHOR):
+        raise RuntimeError("anchor binary not found: %s" % ANCHOR)
+    cmd = [ANCHOR, "check", RULES_TSV, asserted_path, cert_path]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    try:
+        verdict = json.loads(proc.stdout.strip().splitlines()[-1])
+    except (ValueError, IndexError):
+        verdict = {"raw": proc.stdout.strip()}
+    return {"binary": os.path.basename(ANCHOR),
+            "exit": proc.returncode,
+            "verdict": verdict}
+
+
+def anchor_declined(fmt):
+    """The note shown when an anchor is configured but cannot speak for this
+    certificate kind."""
+    return {"applied": False,
+            "reason": ("oo-horn (Horn) checker only; %s uses the OWL-RL rule set "
+                       "(incl. the RDF-list rules it does not cover)" % fmt)}
+
+
 def main(argv):
     if len(argv) != 3:
         sys.stderr.write("usage: check.py ASSERTED.tsv DERIVATIONS.tsv\n")
@@ -291,19 +335,44 @@ def main(argv):
         print(json.dumps(out))
         return 2
 
+    # The optional trust anchor.  It speaks for oo-horn certificates; for
+    # oo-cert it declines, because the proven checker does not cover the
+    # OWL-RL rule set.  A configured-but-broken anchor is a hard error (exit 2):
+    # 'could not check' must never read as 'checked and agreed'.
+    anchor = None
+    if ANCHOR:
+        if fmt == "oo-horn":
+            try:
+                anchor = run_anchor(dpath, gpath)
+            except RuntimeError as e:
+                sys.stderr.write("anchor: %s\n" % e)
+                return 2
+        else:
+            anchor = anchor_declined(fmt)
+
     ok, idx = check_steps(asserted, steps)
     if ok:
-        print(json.dumps({"ok": True, "asserted": len(asserted),
-                          "derivations": len(steps)}))
+        out = {"ok": True, "asserted": len(asserted), "derivations": len(steps)}
+        if anchor is not None:
+            out["anchor"] = anchor
+            # The anchor's verdict is advisory evidence here: EYE ran the check,
+            # the anchor is the proven second opinion.  Disagreement is surfaced,
+            # never hidden.
+            if fmt == "oo-horn" and anchor.get("exit") not in (0, None):
+                out["anchor_disagrees"] = True
+        print(json.dumps(out))
         return 0
     rule, conclusion, premises = steps[idx]
-    print(json.dumps({
+    out = {
         "ok": False,
         "rejected_step": idx,
         "rule": rule,
         "conclusion": "%s %s %s" % conclusion,
         "premises": ["%s %s %s" % p for p in premises],
-    }))
+    }
+    if anchor is not None:
+        out["anchor"] = anchor
+    print(json.dumps(out))
     return 1
 
 
