@@ -1,3 +1,5 @@
 node_modules/
 combined.n3
 neg/
+examples/forged_derivations.tsv
+examples/.ipynb_checkpoints/
