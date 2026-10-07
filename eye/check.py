@@ -22,6 +22,7 @@ reads back the `:ok` facts.  It never decides a step itself.
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 
@@ -76,9 +77,12 @@ VOCAB_IRIS = {
 }
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-EYE_DIR = HERE  # node_modules/ lives beside this file
+EYE_DIR = HERE  # lib/ (native image) or node_modules/ (npm) lives beside this file
 CHECKER = os.path.join(HERE, "checker.n3")
 WORK = os.path.join(HERE, "combined.n3")
+# The native EYE image built by build_eye.sh. Preferred over the npm package:
+# same reasoner, no Node toolchain. Override with $EYE_PVM.
+EYE_PVM = os.environ.get("EYE_PVM", os.path.join(HERE, "lib", "eye.pvm"))
 
 
 class ParseError(Exception):
@@ -249,10 +253,52 @@ class Gen:
         return "\n".join(self.lines) + "\n"
 
 
+def reasoner_cmd():
+    """Resolve the EYE reasoner, most explicit first.
+
+      1. `$EYE_PVM` or `lib/eye.pvm` -- the NATIVE image built by build_eye.sh,
+         run by SWI-Prolog. This is the same reasoner the npm package carries,
+         without the Node toolchain, and it is preferred: a notebook that needs
+         npm to check a certificate is a notebook most users cannot run.
+      2. `$EYE_BIN`          -- an explicit reasoner executable, for odd installs.
+      3. a local `node_modules/.bin/eyereasoner` -- a checkout that ran
+         `npm install`; kept as a fallback, not a requirement.
+      4. `eyereasoner`/`eye` on PATH.
+      5. `npx eyereasoner`   -- LAST: it may fetch from the network on first use,
+         so it is never reached on a machine that has the native image."""
+    if os.path.exists(EYE_PVM):
+        swipl = shutil.which("swipl")
+        if swipl:
+            return [swipl, "-x", EYE_PVM, "--"]
+    explicit = os.environ.get("EYE_BIN")
+    if explicit:
+        return [explicit]
+    here = HERE
+    while True:
+        cand = os.path.join(here, "node_modules", ".bin", "eyereasoner")
+        if os.path.exists(cand):
+            return [cand]
+        parent = os.path.dirname(here)
+        if parent == here:
+            break
+        here = parent
+    for name in ("eyereasoner", "eye"):
+        found = shutil.which(name)
+        if found:
+            return [found]
+    return ["npx", "--yes", "eyereasoner"]
+
+
 def run_eye(work_abs):
-    rel = os.path.relpath(work_abs, EYE_DIR)
-    cmd = ["npx", "eyereasoner", "--nope", "--quiet", "--pass",
-           "--ignore-inference-fuse", rel]
+    """Run the resolved reasoner over one combined .n3 file. The native image
+    takes an absolute path (SWI-Prolog opens it relative to the process cwd, and
+    that is EYE_DIR); the npm CLI takes a path relative to EYE_DIR, which is its
+    own Emscripten working directory."""
+    cmd = reasoner_cmd()
+    native = "-x" in cmd
+    target = work_abs if native else os.path.relpath(work_abs, EYE_DIR)
+    cmd = cmd + ["--nope", "--quiet", "--pass",
+                 "--ignore-inference-fuse", target]
     proc = subprocess.run(cmd, cwd=EYE_DIR, capture_output=True, text=True)
     return proc.stdout + "\n" + proc.stderr
 
@@ -274,30 +320,36 @@ ANCHOR = os.environ.get("OO_HORN_ROCQ")
 RULES_TSV = os.environ.get("OO_RULES")
 
 
-def run_anchor(cert_path, asserted_path):
+def run_anchor(cert_path, asserted_path, binary=None, rules=None):
     """Run the proven oo-horn checker over the same inputs.  Returns a dict,
     or None when no anchor is configured.  Raises RuntimeError when it is
     configured but cannot run, so a caller never reads 'could not check' as
-    'checked and agreed'."""
-    if not ANCHOR:
+    'checked and agreed'.
+
+    `binary`/`rules` default to the module's ANCHOR/RULES_TSV (what the CLI
+    sets from OO_HORN_ROCQ/OO_RULES) so an importing caller can pass them
+    directly instead of mutating module state."""
+    binary = binary if binary is not None else ANCHOR
+    rules = rules if rules is not None else RULES_TSV
+    if not binary:
         return None
-    if not RULES_TSV:
-        raise RuntimeError("OO_HORN_ROCQ is set but OO_RULES (rules table) is not")
-    if not os.path.exists(ANCHOR):
-        raise RuntimeError("anchor binary not found: %s" % ANCHOR)
-    cmd = [ANCHOR, "check", RULES_TSV, asserted_path, cert_path]
+    if not rules:
+        raise RuntimeError("an anchor binary was given but no rules table was")
+    if not os.path.exists(binary):
+        raise RuntimeError("anchor binary not found: %s" % binary)
+    cmd = [binary, "check", rules, asserted_path, cert_path]
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True)
     except OSError as e:
         # A binary that exists but cannot execute (wrong architecture, no exec
         # bit, a host build in a shared tree) must read as 'could not check',
         # never as 'checked and agreed'. The caller turns this into exit 2.
-        raise RuntimeError("anchor binary could not be run (%s): %s" % (e, ANCHOR))
+        raise RuntimeError("anchor binary could not be run (%s): %s" % (e, binary))
     try:
         verdict = json.loads(proc.stdout.strip().splitlines()[-1])
     except (ValueError, IndexError):
         verdict = {"raw": proc.stdout.strip()}
-    return {"binary": os.path.basename(ANCHOR),
+    return {"binary": os.path.basename(binary),
             "exit": proc.returncode,
             "verdict": verdict}
 
@@ -310,55 +362,50 @@ def anchor_declined(fmt):
                        "(incl. the RDF-list rules it does not cover)" % fmt)}
 
 
-def main(argv):
-    if len(argv) != 3:
-        sys.stderr.write("usage: check.py ASSERTED.tsv DERIVATIONS.tsv\n")
-        return 2
-    gpath, dpath = argv[1], argv[2]
-    try:
-        with open(gpath, "r", encoding="utf-8") as fh:
-            asserted = parse_asserted(fh.read())
-    except OSError as e:
-        sys.stderr.write("cannot read %s: %s\n" % (gpath, e))
-        return 2
-    except ParseError as e:
-        sys.stderr.write(str(e) + "\n")
-        return 2
-    try:
-        with open(dpath, "r", encoding="utf-8") as fh:
-            dtext = fh.read()
-        fmt, steps, refute_line = load_derivations(dpath)
-    except OSError as e:
-        sys.stderr.write("cannot read %s: %s\n" % (dpath, e))
-        return 2
-    except ParseError as e:
-        sys.stderr.write(str(e) + "\n")
-        return 2
+def check_certificate(asserted, steps, fmt="oo-cert", refute_line=None,
+                      cert_path=None, asserted_path=None,
+                      anchor_binary=None, anchor_rules=None):
+    """The whole verdict, as a pure function of already-parsed inputs.
 
+    Returns (exit_code, result_dict) with the SAME code contract the CLI uses
+    (0 accept, 1 rejected, 2 parse/other, 3 an anchor disagreement). `main()`
+    is a thin adapter over this: it reads files, calls here, prints the dict.
+    A notebook imports and calls HERE, so no argv and no process boundary is
+    involved in deciding a verdict.
+
+    `anchor_binary`/`anchor_rules` default to this module's ANCHOR/RULES_TSV
+    (what the CLI sets from OO_HORN_ROCQ/OO_RULES); an importing caller can
+    pass them instead of touching module state. `cert_path`/`asserted_path` are
+    only needed when an anchor runs, because the anchor is a separate binary
+    that takes file paths.
+    """
     if fmt == "oo-refute":
         # Check the derivation prefix with the same machinery, then flag.
-        prefix_result = check_steps(asserted, steps)
+        prefix_ok, prefix_idx = check_steps(asserted, steps)
         out = {"ok": False, "format": "oo-refute/1",
                "error": "this is an oo-refute/1 refutation certificate; "
                         "oo-cert does not check it (different verdict)",
-               "prefix_ok": prefix_result[0]}
-        if not prefix_result[0]:
-            out["rejected_step"] = prefix_result[1]
-        print(json.dumps(out))
-        return 2
+               "prefix_ok": prefix_ok}
+        if not prefix_ok:
+            out["rejected_step"] = prefix_idx
+        return (2, out)
 
     # The optional trust anchor.  It speaks for oo-horn certificates; for
     # oo-cert it declines, because the proven checker does not cover the
     # OWL-RL rule set.  A configured-but-broken anchor is a hard error (exit 2):
     # 'could not check' must never read as 'checked and agreed'.
+    binary = anchor_binary if anchor_binary is not None else ANCHOR
     anchor = None
-    if ANCHOR:
+    if binary:
         if fmt == "oo-horn":
+            if not cert_path or not asserted_path:
+                raise RuntimeError("an anchor needs cert_path and asserted_path")
             try:
-                anchor = run_anchor(dpath, gpath)
+                anchor = run_anchor(cert_path, asserted_path,
+                                    binary=binary,
+                                    rules=anchor_rules if anchor_rules is not None else RULES_TSV)
             except RuntimeError as e:
-                sys.stderr.write("anchor: %s\n" % e)
-                return 2
+                return (2, {"ok": False, "error": "anchor: %s" % e})
         else:
             anchor = anchor_declined(fmt)
 
@@ -378,8 +425,7 @@ def main(argv):
                 out["ok"] = False
                 out["error"] = ("the proven oo-horn anchor refused a certificate "
                                 "EYE accepted (possible false pass)")
-        print(json.dumps(out))
-        return 3 if disagree else 0
+        return (3 if disagree else 0, out)
     rule, conclusion, premises = steps[idx]
     out = {
         "ok": False,
@@ -390,8 +436,41 @@ def main(argv):
     }
     if anchor is not None:
         out["anchor"] = anchor
+    return (1, out)
+
+
+def main(argv):
+    """CLI adapter: read two files, call check_certificate, print one JSON
+    line, return the exit code. The verdict itself is decided in
+    check_certificate, so an importing caller never needs this path."""
+    if len(argv) != 3:
+        sys.stderr.write("usage: check.py ASSERTED.tsv DERIVATIONS.tsv\n")
+        return 2
+    gpath, dpath = argv[1], argv[2]
+    try:
+        with open(gpath, "r", encoding="utf-8") as fh:
+            asserted = parse_asserted(fh.read())
+    except OSError as e:
+        sys.stderr.write("cannot read %s: %s\n" % (gpath, e))
+        return 2
+    except ParseError as e:
+        sys.stderr.write(str(e) + "\n")
+        return 2
+    try:
+        with open(dpath, "r", encoding="utf-8") as fh:
+            fh.read()
+        fmt, steps, refute_line = load_derivations(dpath)
+    except OSError as e:
+        sys.stderr.write("cannot read %s: %s\n" % (dpath, e))
+        return 2
+    except ParseError as e:
+        sys.stderr.write(str(e) + "\n")
+        return 2
+
+    code, out = check_certificate(asserted, steps, fmt=fmt, refute_line=refute_line,
+                                  cert_path=dpath, asserted_path=gpath)
     print(json.dumps(out))
-    return 1
+    return code
 
 
 def check_steps(asserted, steps):
@@ -407,6 +486,14 @@ def check_steps(asserted, steps):
         if i not in ok_idx:
             return (False, i)
     return (True, None)
+
+
+def cli():
+    """Console-script entry point (see pyproject.toml):
+    `oocert-eye ASSERTED.tsv DERIVATIONS.tsv`. Console scripts are called with
+    no arguments and their return value is passed to sys.exit, so this is the
+    same call the `__main__` guard makes."""
+    return main(sys.argv)
 
 
 if __name__ == "__main__":

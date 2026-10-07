@@ -2,10 +2,17 @@
 
 `oo-cert` (`lake exe oo-cert ASSERTED.tsv DERIVATIONS.tsv`) checks a derivation
 certificate against `lean/OOCert/Rules.lean`. This directory re-implements the
-same check in N3, run by EYE (WASM, `eyereasoner` v11.24.8). The point is to
-show that the certificate-checking pattern does not need Lean: the rule table
-is data, the semantics fit in N3 forward rules, and the trusted core is one
-readable `checker.n3`.
+same check in N3, run by **EYE** (v11.24.8). The point is to show that the
+certificate-checking pattern does not need Lean: the rule table is data, the
+semantics fit in N3 forward rules, and the trusted core is one readable
+`checker.n3`.
+
+The reasoner is the **native EYE image** built by `build_eye.sh`
+(`lib/eye.pvm`, MIT, from `eyereasoner/eye`) and run by SWI-Prolog — an ordinary
+system package, no Node toolchain. The npm package `eyereasoner` is the same
+reasoner compiled to WebAssembly and is accepted as a fallback; it is never
+required. `python3 check.py` and the `oocert-eye` console script (see
+`pyproject.toml`) both call the same functions.
 
 ## Run it
 
@@ -192,15 +199,15 @@ this file; `forged.tsv` is rejected at step 2.
 
 ## Performance
 
-Each run starts the EYE WASM engine, so the wall time is dominated by `npx`
-startup, not reasoning. Measured here: ~0.65 s for a 3-step certificate, of
-which ~0.55 s is `npx`/WASM startup and the reasoning itself is a few ms. The
-cost that will actually bite is O(steps x candidates) in the two meta-rules that
-copy an earlier conclusion onto every later step's premise (`<urn:knownAt>`), so
-runtime should scale worse than linearly in the number of steps. For large real
-certificates this encoding is a feasibility demo, not a fast checker; the Lean
-checker is the production one. No inference-fuse aborts were observed on the
-fixtures here (`--ignore-inference-fuse` is passed to be safe).
+With the native image each run is one SWI-Prolog process; there is no `npx`
+startup cost, and a multi-step notebook run is now seconds rather than a
+half-second per call. The cost that will actually bite is O(steps x candidates)
+in the two meta-rules that copy an earlier conclusion onto every later step's
+premise (`<urn:knownAt>`), so runtime scales worse than linearly in the number
+of steps. For large real certificates this encoding is a feasibility demo, not a
+fast checker; the Lean checker is the production one. No inference-fuse aborts
+were observed on the fixtures here (`--ignore-inference-fuse` is passed to be
+safe).
 
 ## What this does and does not claim
 

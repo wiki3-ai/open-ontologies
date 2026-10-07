@@ -1,0 +1,52 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "oocert-eye"
+version = "0.1.0"
+description = "N3/EYE re-implementation of the open-ontologies OOCert certificate checker"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{ name = "PUP contributors" }]
+keywords = ["rdf", "owl", "n3", "notation3", "eye", "certificate", "reasoner"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+# The checker is a Python driver plus one reasoner call. The driver needs no
+# Python packages at all: it emits N3 and reads EYE's output back. What it does
+# need at RUN time is the EYE reasoner. That is NOT a Python dependency and NOT
+# a Node one either: `build_eye.sh` builds the native EYE image (`lib/eye.pvm`,
+# MIT, from eyereasoner/eye) with SWI-Prolog, an ordinary system package
+# (`apt-get install swi-prolog-nox`). The npm package `eyereasoner` is the same
+# reasoner compiled to WASM, and is accepted as a fallback -- never required.
+# A wheel cannot ship a Prolog image or a compiler, so this boundary is declared
+# here rather than hidden in metadata that would make `pip install` fail for
+# everyone -- the same reason open-ontologies leaves the Lean `oo-horn` binary
+# out of its wheel.
+dependencies = []
+
+[project.optional-dependencies]
+# Fixtures/notebook extras: run the checker and drive it from a notebook.
+dev = ["pytest>=8", "jupyterlab>=4", "nbformat", "nbclient"]
+
+[project.scripts]
+# `oocert-eye ASSERTED.tsv DERIVATIONS.tsv` -- the same call check.py's
+# __main__ guard makes, so a shell reads the same exit codes (0/1/2, and 3 with
+# the anchor set).
+oocert-eye = "check:cli"
+
+[project.urls]
+Homepage = "https://github.com/wiki3-ai/open-ontologies"
+Repository = "https://github.com/wiki3-ai/open-ontologies"
+
+# `check.py` and `checker.n3` are flat files at this directory's root, not a
+# package. Name them explicitly: hatchling cannot infer a package layout from a
+# lone module, and shipping an empty wheel would fail only at run time, in the
+# worst place. `checker.n3` travels with the module because `check.py` reads it
+# from `os.path.dirname(__file__)`.
+[tool.hatch.build.targets.wheel]
+only-include = ["check.py", "checker.n3"]

@@ -1,5 +1,16 @@
+# The EYE reasoner is the native image built by build_eye.sh, or the npm
+# package as a fallback. Neither is source; both are built/fetched.
+lib/
+build/
 node_modules/
+node_modules.hidden/
+# Run artifacts
 combined.n3
 neg/
 examples/forged_derivations.tsv
 examples/.ipynb_checkpoints/
+# Python build artifacts
+__pycache__/
+*.pyc
+dist/
+*.egg-info/
