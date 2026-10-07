@@ -48,6 +48,15 @@ AUDITED=(
   deep_mutual_seeded_is_accepted
 )
 
+# The prover's own version identity, kept in build/ so a compiled object left
+# by a DIFFERENT Rocq can be detected. A .vo carries a version magic the kernel
+# refuses outright ("bad version number ..."), so a tree carried between hosts,
+# or upgraded in place, fails on the first stale object and reads like a broken
+# proof rather than a stale build.
+prover_id() {
+  "$ROCQ" --version 2>/dev/null | tr '\n' ' '
+}
+
 build() {
   local root="$1"
   cd "$root"
@@ -56,8 +65,34 @@ build() {
   # the kernel always evaluates what is in the tree. See gen_fixture_data.sh.
   sh gen_fixture_data.sh
 
+  mkdir -p build
+
+  # Version guard. If the prover changed since the last build in this tree, the
+  # compiled objects under theories/ belong to the old one and cannot be read by
+  # this one, so drop them before make sees them.
+  local stamp="build/.prover-version" want jobs log="build/make.log"
+  want="$(prover_id)"
+  if [ -f "$stamp" ] && [ "$(cat "$stamp")" != "$want" ]; then
+    echo "prover changed since last build; cleaning compiled objects" >&2
+    rm -f theories/*.vo theories/*.vos theories/*.vok theories/*.glob
+  fi
+  printf '%s' "$want" > "$stamp"
+
   "$ROCQ" makefile -f _CoqProject -o Makefile.rocq >/dev/null
-  make -f Makefile.rocq -j "$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)"
+  jobs="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)"
+  if ! make -f Makefile.rocq -j "$jobs" 2>&1 | tee "$log"; then
+    # The stamp can be missing (a tree copied in without build/) or wrong (an
+    # older Rocq compiled these). Stale objects then surface as this exact
+    # error, so clean and retry once: the fix is automatic, not a note in a
+    # README. Any other failure is a real one and returns.
+    if grep -q 'bad version number' "$log"; then
+      echo "stale compiled object from another Rocq; cleaning and retrying" >&2
+      rm -f theories/*.vo theories/*.vos theories/*.vok theories/*.glob
+      make -f Makefile.rocq -j "$jobs"
+    else
+      return 1
+    fi
+  fi
 
   # Re-run the audit file on its own so its output is captured rather than
   # buried in a parallel make log.
