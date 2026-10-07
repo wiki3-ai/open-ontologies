@@ -20,6 +20,7 @@ import os
 import shutil
 import stat
 import subprocess
+import sys
 import tempfile
 import time
 from http.server import BaseHTTPRequestHandler
@@ -64,15 +65,76 @@ def checker() -> Path | None:
     return dst
 
 
-def run_checker(cert_dir: Path) -> dict:
-    """Run the Lean checker over a certificate directory and return what it said.
+def eye_dir() -> Path | None:
+    """The directory holding the EYE/N3 checker (eye/check.py), or None.
 
-    The exit code is part of the answer, not an error: exit 1 with a named rule
-    is the whole point of the third panel.
+    Chosen by OO_EYE (a path to that directory); otherwise the sibling `eye/`
+    of a repository checkout (web/try/api -> open-ontologies/eye). The EYE
+    checker runs on the eyereasoner WASM engine through `npx`, so it is opt-in:
+    a Vercel bundle carries neither node nor eye/node_modules.
     """
+    override = os.environ.get("OO_EYE")
+    cand = Path(override) if override else (HERE.parents[2] / "eye")
+    return cand if (cand / "check.py").exists() else None
+
+
+def run_eye_checker(cert_dir: Path) -> dict:
+    """Run the EYE/N3 checker over a certificate directory.
+
+    Same exit-code contract as oo-cert -- 0 accepted, 1 a step rejected, 2 a
+    file could not be read or parsed -- but a DIFFERENT kind of checker. oo-cert
+    carries the Lean theorem OOCert.certificate_sound; the EYE checker carries
+    no theorem, so an accept here means "the rules licensed every step", not
+    "it is entailed", and the answer says so in `means` rather than borrowing
+    oo-cert's word `theorem`.
+    """
+    d = eye_dir()
+    if d is None:
+        return {"absent": True, "checker": "eye",
+                "means": "no EYE checker here (set OO_EYE to eye/), so nothing was checked"}
+    proc = subprocess.run(
+        [sys.executable, str(d / "check.py"),
+         str(cert_dir / "asserted.tsv"), str(cert_dir / "derivations.tsv")],
+        capture_output=True, text=True, timeout=TIMEOUT_S, cwd=str(d),
+    )
+    line = next((l for l in proc.stdout.splitlines() if l.startswith("{")), "")
+    try:
+        out = json.loads(line) if line else {}
+    except json.JSONDecodeError:
+        out = {}
+    out["checker"] = "eye"
+    out["exit"] = proc.returncode
+    out["means"] = ("the EYE/N3 checker ran the certificate against the rule "
+                    "table: accept means the rules licensed every step, not a "
+                    "machine-checked theorem")
+    if not line:
+        out["stderr_tail"] = proc.stderr[-300:]
+    return out
+
+
+def run_checker(cert_dir: Path) -> dict:
+    """Run the selected certificate checker over a certificate directory and
+    return what it said.
+
+    Which checker runs is OO_CHECKER: 'lean' -> the pinned oo-cert (carries the
+    Lean theorem certificate_sound), 'eye' -> the EYE/N3 checker (no theorem),
+    'auto' (default) -> oo-cert when the release carries it, otherwise the EYE
+    checker when a checkout has one. The exit code is part of the answer, not an
+    error: exit 1 with a named rule is the whole point of the third panel, and
+    `checker` says which of the two produced it.
+    """
+    want = os.environ.get("OO_CHECKER", "auto")
+    if want == "eye":
+        return run_eye_checker(cert_dir)
     c = checker()
     if c is None:
-        return {"absent": True, "means": "this release carries no oo-cert, so nothing was checked here"}
+        if want == "lean":
+            return {"absent": True, "checker": "oo-cert",
+                    "means": "this release carries no oo-cert, so nothing was checked here"}
+        if eye_dir() is not None:
+            return run_eye_checker(cert_dir)
+        return {"absent": True, "checker": None,
+                "means": "this deployment carries no checker, so nothing was checked here"}
     proc = subprocess.run(
         [str(c), str(cert_dir / "asserted.tsv"), str(cert_dir / "derivations.tsv")],
         capture_output=True, text=True, timeout=TIMEOUT_S,
@@ -82,6 +144,7 @@ def run_checker(cert_dir: Path) -> dict:
         out = json.loads(line) if line else {}
     except json.JSONDecodeError:
         out = {}
+    out["checker"] = "oo-cert"
     out["exit"] = proc.returncode
     if not line:
         out["stderr_tail"] = proc.stderr[-300:]
@@ -95,7 +158,29 @@ def engine_info() -> dict:
         h = hashlib.sha256(engine().read_bytes()).hexdigest()
     except Exception as e:  # noqa: BLE001
         h = f"unavailable: {e}"
+    want = os.environ.get("OO_CHECKER", "auto")
     c = checker()
+    if want == "eye" or (c is None and want != "lean" and eye_dir() is not None):
+        # The EYE/N3 checker is a script, not a pinned binary; hash the two files
+        # it is, so the page can still print something a reader can compare.
+        d = eye_dir()
+        ch = None
+        if d is not None:
+            try:
+                blob = (d / "checker.n3").read_bytes() + (d / "check.py").read_bytes()
+                ch = hashlib.sha256(blob).hexdigest()
+            except Exception as e:  # noqa: BLE001
+                ch = f"unavailable: {e}"
+        return {
+            "tag": tag,
+            "sha256": h,
+            "checker_sha256": ch,
+            "checker": "eye" if d is not None else None,
+            "means": "every answer on this page is the output of the engine; the "
+                     "certificate is checked by the EYE/N3 checker, which carries "
+                     "no machine-checked theorem -- accept means the rules "
+                     "licensed every step",
+        }
     ch = None
     if c is not None:
         try:

@@ -172,7 +172,7 @@ const STR = {
     step1: '1 · A sheet',
     drop: 'Put a CSV file here, or click to choose one. The limit is 1 MB.',
     samples: 'samples:',
-    samples_hint: 'Each one runs the whole loop: induce, then reason, then a certificate the Lean checker accepts, then one conclusion forged and refused by that same checker.',
+    samples_hint: 'Each one runs the whole loop: induce, then reason, then a certificate a checker accepts, then one conclusion forged and refused by that same checker.',
     paste: '…or paste a CSV file with a header row',
     go: 'Induce the ontology', cls: 'class name', clsph: 'from the file name',
     step2: '2 · What the engine induced',
@@ -188,16 +188,16 @@ const STR = {
     observed: '; observed', notconstrained: '(reported, and not constrained)',
     engine_says: 'The engine says: ',
     step4: '4 · Add one line, and get a proof',
-    step4p: 'An induced ontology is flat, so a reasoner derives nothing from it. That is measured, not assumed: 0 derivations under rdfs and under owl-rl, because the mapping already gives each row its class. So add one line. This is the front page\u2019s own argument: plan a change to an ontology, and see every consequence before you apply it. The engine writes a certificate for what follows, the Lean checker accepts it, and then the page forges one conclusion and hands the same checker the same premises.',
+    step4p: 'An induced ontology is flat, so a reasoner derives nothing from it. That is measured, not assumed: 0 derivations under rdfs and under owl-rl, because the mapping already gives each row its class. So add one line. This is the front page\u2019s own argument: plan a change to an ontology, and see every consequence before you apply it. The engine writes a certificate for what follows, a checker accepts it, and then the page forges one conclusion and hands the same checker the same premises.',
     goplan: 'Add the line and reason',
     p_new: 'consequences that were not there before',
     p_cert: 'The certificate', p_acc: 'The checker accepted it', p_ref: 'The checker refused the forged one',
-    p_theorem: 'theorem', p_exit: 'exit', p_rule: 'rule', p_absent: 'This release carries no checker, so nothing was checked here.',
+    p_theorem: 'theorem', p_exit: 'exit', p_rule: 'rule', p_checker: 'checker', p_absent: 'This deployment carries no checker, so nothing was checked here.',
     p_nothing: 'That line derives nothing. Try a subClassOf over the induced class.',
     p_forgedline: 'One conclusion was changed, and both premises were left exactly as they were:',
     stepg: 'Your sheet, drawn',
     graphp: 'Your sheet, drawn the way the front page draws ies-core. Grey is what you asserted. Green is what the engine derived and the checker accepted. Red is the line that was forged and refused. Literals, blank nodes and list cells are not drawn, because a node for each of them hides the shape.',
-    graphp_flat: 'Your sheet, drawn the way the front page draws ies-core. Every edge is grey, and grey is what a person asserted. Nothing is green yet, because an induced ontology is flat and a reasoner derives nothing from it. Step 4 below is where the engine writes a certificate, the Lean checker accepts it, and one forged line is refused: watch this picture gain a green layer and one red edge. Literals, blank nodes and list cells are not drawn, because a node for each of them hides the shape.',
+    graphp_flat: 'Your sheet, drawn the way the front page draws ies-core. Every edge is grey, and grey is what a person asserted. Nothing is green yet, because an induced ontology is flat and a reasoner derives nothing from it. Step 4 below is where the engine writes a certificate, a checker accepts it, and one forged line is refused: watch this picture gain a green layer and one red edge. Literals, blank nodes and list cells are not drawn, because a node for each of them hides the shape.',
     g_empty: 'This run drew no edges: nothing was asserted, derived or refused over a term this picture can name. The tables above are the answer; the picture is only a way of looking at it.',
     g_missing: 'This run returned no picture. The induced ontology and its evidence above are unaffected.',
     g_repainted: 'The picture above now carries all three colours:',
@@ -232,7 +232,7 @@ const STR = {
     step1: '1 · 一张表格',
     drop: '把 CSV 文件拖到这里，或者点击选择一个。上限是 1 MB。',
     samples: '示例：',
-    samples_hint: '每一个都会跑完整条链路：先归纳，再推理，然后生成一份 Lean 检查器接受的证书，最后伪造一条结论并由同一个检查器将其拒绝。',
+    samples_hint: '每一个都会跑完整条链路：先归纳，再推理，然后生成一份检查器接受的证书，最后伪造一条结论并由同一个检查器将其拒绝。',
     paste: '……或者粘贴一个带表头行的 CSV 文件',
     go: '归纳出本体', cls: '类名', clsph: '来自文件名',
     step2: '2 · 引擎归纳出了什么',
@@ -248,16 +248,16 @@ const STR = {
     observed: '；观察到', notconstrained: '（只报告，不作为约束）',
     engine_says: '引擎说：',
     step4: '4 · 加一行，然后得到一份证明',
-    step4p: '归纳出的本体是扁平的，推理机从它推不出东西。这是测得的，不是假设的：在 rdfs 和 owl-rl 下都是 0 条推论，因为映射已经给每一行赋予了类。所以请加一行。这正是首页自己的论点：为本体规划一次变更，在应用之前看清每一项后果。引擎为随之而来的结论写一份证书，Lean 检查器接受它；随后页面伪造一条结论，把同样的前提交给同一个检查器。',
+    step4p: '归纳出的本体是扁平的，推理机从它推不出东西。这是测得的，不是假设的：在 rdfs 和 owl-rl 下都是 0 条推论，因为映射已经给每一行赋予了类。所以请加一行。这正是首页自己的论点：为本体规划一次变更，在应用之前看清每一项后果。引擎为随之而来的结论写一份证书，检查器接受它；随后页面伪造一条结论，把同样的前提交给同一个检查器。',
     goplan: '加上这一行并推理',
     p_new: '条此前不存在的后果',
     p_cert: '证书', p_acc: '检查器接受了它', p_ref: '检查器拒绝了伪造的那一份',
-    p_theorem: '定理', p_exit: '退出码', p_rule: '规则', p_absent: '本次发布不含检查器，因此这里没有检查任何东西。',
+    p_theorem: '定理', p_exit: '退出码', p_rule: '规则', p_checker: '检查器', p_absent: '本次部署不含检查器，因此这里没有检查任何东西。',
     p_nothing: '这一行推不出任何东西。试试在归纳出的类上写一条 subClassOf。',
     p_forgedline: '一条结论被改动，两条前提原样保留：',
     stepg: '你的表格，画出来',
     graphp: '你的表格，用首页绘制 ies-core 的同一种方式画出来。灰色是你断言的，绿色是引擎推导并被检查器接受的，红色是被伪造并遭拒绝的那一行。字面量、空节点和列表单元都不绘制，因为给它们每一个都配一个节点会掩盖结构。',
-    graphp_flat: '你的表格，用首页绘制 ies-core 的同一种方式画出来。现在每条边都是灰色的，灰色就是人断言的部分。还没有绿色，因为归纳出的本体是扁平的，推理机从它推不出东西。下面的第 4 步才是引擎写出证书、Lean 检查器接受它、并有一条被伪造的结论遭到拒绝的地方：请看这幅图长出绿色的一层和一条红边。字面量、空节点和列表单元都不绘制，因为给它们每一个都配一个节点会掩盖结构。',
+    graphp_flat: '你的表格，用首页绘制 ies-core 的同一种方式画出来。现在每条边都是灰色的，灰色就是人断言的部分。还没有绿色，因为归纳出的本体是扁平的，推理机从它推不出东西。下面的第 4 步才是引擎写出证书、检查器接受它、并有一条被伪造的结论遭到拒绝的地方：请看这幅图长出绿色的一层和一条红边。字面量、空节点和列表单元都不绘制，因为给它们每一个都配一个节点会掩盖结构。',
     g_empty: '这次运行没有画出任何边：没有任何断言、推论或拒绝落在这幅图能命名的词项上。上面的表格才是答案，图只是看它的一种方式。',
     g_missing: '这次运行没有返回图。上面归纳出的本体及其证据不受影响。',
     g_repainted: '上面那幅图现在带着全部三种颜色：',
@@ -430,7 +430,8 @@ $('#goplan').onclick=async()=>{
     h+=`<dl class="kv"><dt>${L.p_cert}</dt><dd><code>${esc(c.asserted)} asserted, ${esc(c.derivations)} derivations</code> · ${esc(JSON.stringify(c.by_rule||{}))}</dd>`;
     if(a.absent){h+=`<dt>${L.p_acc}</dt><dd><span class="pill warn">${L.p_absent}</span></dd>`;}
     else{
-      h+=`<dt>${L.p_acc}</dt><dd><span class="pill ${a.ok?'ok':'bad'}">${L.p_exit} ${esc(a.exit)}</span> ${a.theorem?`${L.p_theorem} <code>${esc(a.theorem)}</code>`:''}</dd>`;
+      const ck=a.checker?(a.checker==='eye'?`${L.p_checker} <code>eye</code> (N3) `:`${L.p_checker} <code>oo-cert</code> (Lean) `):'';
+      h+=`<dt>${L.p_acc}</dt><dd><span class="pill ${a.ok?'ok':'bad'}">${L.p_exit} ${esc(a.exit)}</span> ${ck}${a.theorem?`${L.p_theorem} <code>${esc(a.theorem)}</code>`:''}</dd>`;
       if(f)h+=`<dt>${L.p_ref}</dt><dd><span class="pill ${f.ok?'bad':'ok'}">${L.p_exit} ${esc(f.exit)}</span> ${f.rule?`${L.p_rule} <code>${esc(f.rule)}</code>`:''}</dd>`;
     }
     h+='</dl>';
